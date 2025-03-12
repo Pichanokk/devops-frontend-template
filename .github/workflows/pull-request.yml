@@ -3,9 +3,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     paths:
-      - 'app/**'  # Only trigger on changes to files in the app directory
+      - 'app/**' 
 permissions:
   contents: read
+  pull-requests: write  
 jobs:
   lint-build:
     name: "Frontend Lint and Build"
@@ -45,11 +46,39 @@ jobs:
       - name: "Lint"
         working-directory: ./app
         run: pnpm lint
+        continue-on-error: false  
       
       - name: "Type Check"
         working-directory: ./app
         run: pnpm exec tsc --noEmit
+        continue-on-error: false  
       
       - name: "Build"
         working-directory: ./app
         run: pnpm build
+        continue-on-error: false  
+      
+      - name: "Comment on PR"
+        uses: actions/github-script@v6
+        if: always()  # Run even if previous steps failed
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const workflow_conclusion = '${{ job.status }}';
+            
+            let comment = '## Frontend Pull Request Check Results\n\n';
+            
+            if (workflow_conclusion === 'success') {
+              comment += '✅ All checks passed successfully! Your frontend code looks good.\n';
+            } else {
+              comment += '❌ Some checks failed. Please review the workflow logs for details.\n';
+            }
+            
+            comment += '\nChecks run:\n- Linting\n- Type checking\n- Build verification\n';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
